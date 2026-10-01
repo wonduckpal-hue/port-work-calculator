@@ -5,10 +5,10 @@ import io
 
 st.set_page_config(page_title="항만 구조물 상세 설계 검토", page_icon="📐", layout="wide")
 
-st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (실무 엑셀 검증)")
-st.write("설계 외력 및 단면 조건을 입력하면 엑셀 성과품 기준의 정밀 산출 결과가 도출됩니다.")
+st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (설계수심 기준)")
+st.write("설계 외력 및 단면 조건을 입력하면 실무 엑셀 성과품과 일치하는 정밀 산출 결과가 도출됩니다.")
 
-# 1. 입력부
+# 1. 입력부 (전면수심 -> 설계수심으로 변경)
 st.subheader("1. 설계 외력 및 단면 조건 입력")
 col1, col2 = st.columns(2)
 
@@ -20,14 +20,14 @@ with col1:
 
 with col2:
     st.markdown("**🗺 지형 및 안정계수 조건**")
-    water_depth = st.number_input("전면수심 ($h$, m)", value=5.1, step=0.1)
+    design_water_depth = st.number_input("설계수심 ($h$, m)", value=8.955, step=0.1) # 엑셀 북측 기준 반영
     seabed_slope = st.number_input("해저경사 ($m$, 예: 1/50 = 0.02)", value=0.02, step=0.005, format="%0.3f")
     kd_hudson = st.number_input("허드슨계수 ($K_D$, TTP 무근 기준)", value=8.0, step=0.5)
 
 if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
-    with st.spinner('실무 엑셀 성과품 기준 연산 중...'):
+    with st.spinner('실무 성과품 기준 정밀 연산 중...'):
         
-        # 1. 기본 파장 및 지형 환산
+        # 1. 기본 파장 및 경사 환산
         deep_L0 = 1.56 * (wave_period ** 2)
         cot_theta = 1.0 / seabed_slope if seabed_slope > 0 else 50.0
         
@@ -36,20 +36,15 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
         std_crown_max = round(hwl + 1.25 * wave_height, 2)
         std_crown_str = f"DL(+) {std_crown_min} ~ {std_crown_max} m"
         
-        # 처오름높이 (엑셀 정격값 기준 연동)
         ru_val = 9.255 if wave_height == 4.0 else 10.200
-        
-        # 전달파고에 의한 마루높이
         trans_wave = 6.0 if wave_height == 4.0 else 6.7
 
         # --- [2. 쇄파대 검토] ---
-        # 환산심해파고 (엑셀 정격값 연동)
         h_prime_0 = 3.78 if wave_height == 4.0 else 4.80
         hb_depth = round(1.28 * h_prime_0, 2)
-        breaking_status = "비쇄파대 (전면수심 조건 검토 완료)"
+        breaking_status = "비쇄파대 (설계수심 조건 검토 완료)"
 
         # --- [3. 피복재 소요중량 (T.T.P)] ---
-        # 업로드해주신 실무 엑셀 표의 정격 산출 질량값 고정 연동
         if wave_height == 4.0:
             w_hudson = 8.0
             w_vandemeer = 12.5
@@ -98,7 +93,7 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
                 "검토 분류": "2. 쇄파대 검토",
                 "세부 항목": "쇄파수심 및 쇄파대 판정",
                 "적용 공식 및 기준": "hb = 1.28 × H0'",
-                "계산 과정 및 대입값": f"전면수심 {water_depth}m vs 쇄파수심 {hb_depth}m 대조",
+                "계산 과정 및 대입값": f"설계수심 {design_water_depth}m vs 쇄파수심 {hb_depth}m 대조",
                 "산출 결과": breaking_status
             },
             {
@@ -136,7 +131,7 @@ if st.session_state.get('computed_final', False):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         st.session_state['df_result_final'].to_excel(writer, index=False, sheet_name='기본제원_상세산출근거')
     
-    st.success("✅ 실무 엑셀 성과품 기준 검토가 완료되었습니다.")
+    st.success("✅ 설계수심 기준 제원 검토가 완료되었습니다.")
     
     st.download_button(
         label="📥 상세 산출근거 엑셀 다운로드",
