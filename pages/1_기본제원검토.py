@@ -5,8 +5,8 @@ import io
 
 st.set_page_config(page_title="항만 구조물 상세 설계 검토", page_icon="📐", layout="wide")
 
-st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (파랑 유속 자동산듯)")
-st.write("파랑 조건과 수심, 세굴방지공 설치수심을 입력하면 파랑 유속($U_{max}$)이 자동 계산되어 이스바쉬 사석 안정성까지 연동됩니다.")
+st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (이스바쉬 m³ 단위 적용)")
+st.write("파랑 조건과 수심, 세굴방지공 설치수심을 입력하면 파랑 유속 자동산출 및 이스바쉬 체적($m^3$) 검토 결과가 도출됩니다.")
 
 # 1. 입력부
 st.subheader("1. 설계 외력 및 단면 조건 입력")
@@ -28,18 +28,15 @@ with col2:
 if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
     with st.spinner('파랑 유속 자동 계산 및 KDS 정밀 연산 중...'):
         
-        # 1. 천해파장(L) 추정 (분산관계식 근사 반복 또는 심해파장 기준 환산)
-        # L = L0 * tanh(2*pi*h / L) 근사 계산
+        # 1. 천해파장(L) 추정 (분산관계식 근사 반복)
         deep_L0 = 1.56 * (wave_period ** 2)
-        # 초기값으로 L 산정 후 보정
         L_approx = deep_L0 * np.tanh(2 * np.pi * design_water_depth / deep_L0)
-        for _ in range(5):  # 수치 반복 보정
+        for _ in range(5):
             L_approx = deep_L0 * np.tanh(2 * np.pi * design_water_depth / L_approx)
         
         cot_theta = 1.0 / seabed_slope if seabed_slope > 0 else 50.0
         
         # --- [유속 자동 산정식 적용 (미소진폭파 이론)] ---
-        # U_max = ( \pi * H / T ) * [ cosh(2*pi*(Z+h) / L) / sinh(2*pi*h / L) ]
         term1 = (np.pi * wave_height) / wave_period
         arg_cosh = (2.0 * np.pi * (z_depth + design_water_depth)) / L_approx
         arg_sinh = (2.0 * np.pi * design_water_depth) / L_approx
@@ -76,14 +73,16 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
             w_vandemeer = round(w_hudson * 1.56, 1)
             w_takahashi = round(w_hudson * 1.25, 1)
             
-        # 3-4. 이스바쉬(Isbash) 공식에 의한 사석 안정질량 연동
+        # 3-4. 이스바쉬(Isbash) 공식에 의한 사석 체적($m^3$) 산정
         specific_gravity_stone = 2.65
         cs_factor = 1.2
         g_acc = 9.81
+        
         stone_diam = u_max / (cs_factor * np.sqrt(2 * g_acc * (specific_gravity_stone - 1.0)))
-        isbash_weight_ton = round((np.pi / 6.0) * (stone_diam ** 3) * (specific_gravity_stone * 1.03) * 1.5 / 1000.0, 3)
-        if isbash_weight_ton < 0.05:
-            isbash_weight_ton = round(0.08, 3)
+        # 체적(m^3) 산정 공식: V = (π / 6) * D^3 (또는 구형 환산 체적)
+        isbash_volume_m3 = round((np.pi / 6.0) * (stone_diam ** 3), 3)
+        if isbash_volume_m3 < 0.01:
+            isbash_volume_m3 = 0.015
 
         # 결과 데이터프레임 구성
         result_data = [
@@ -126,7 +125,7 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
                 "검토 분류": "2. 쇄파대 검토",
                 "세부 항목": "쇄파수심 및 쇄파대 판정",
                 "적용 공식 및 기준": "hb = 1.28 × H0'",
-                "계산 과정 및 대입값": f"전면수심 {design_water_depth}m vs 쇄파수심 {hb_depth}m 대조",
+                "계산 과정 및 대입값": f"설계수심 {design_water_depth}m vs 쇄파수심 {hb_depth}m 대조",
                 "산출 결과": breaking_status
             },
             {
@@ -155,7 +154,7 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
                 "세부 항목": "이스바쉬(Isbash) 사석 안정성",
                 "적용 공식 및 기준": "U_max 수립자속도 자동 연산 후 이스바쉬 적용",
                 "계산 과정 및 대입값": f"산출 유속 U_max = {u_max_val} m/s 적용",
-                "산출 결과": f"약 {isbash_weight_ton} ton/개 (사석)"
+                "산출 결과": f"약 {isbash_volume_m3} m³/개 (사석 체적)"
             }
         ]
 
@@ -171,7 +170,7 @@ if st.session_state.get('computed_final', False):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         st.session_state['df_result_final'].to_excel(writer, index=False, sheet_name='기본제원_상세산출근거')
     
-    st.success("✅ 파랑 유속 자동산출 및 이스바쉬 검토가 완료되었습니다.")
+    st.success("✅ 이스바쉬 체적 단위($m^3$) 검토가 포함된 제원 산출이 완료되었습니다.")
     
     st.download_button(
         label="📥 상세 산출근거 엑셀 다운로드",
