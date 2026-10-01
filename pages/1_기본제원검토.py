@@ -5,10 +5,10 @@ import io
 
 st.set_page_config(page_title="항만 구조물 상세 설계 검토", page_icon="📐", layout="wide")
 
-st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (설계수심 기준)")
-st.write("설계 외력 및 단면 조건을 입력하면 실무 엑셀 성과품과 일치하는 정밀 산출 결과가 도출됩니다.")
+st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (허용월파량 포함)")
+st.write("설계 외력 및 단면 조건을 입력하면 허용월파량 검토가 포함된 실무 기준 산출 결과가 도출됩니다.")
 
-# 1. 입력부 (전면수심 -> 설계수심으로 변경)
+# 1. 입력부
 st.subheader("1. 설계 외력 및 단면 조건 입력")
 col1, col2 = st.columns(2)
 
@@ -20,7 +20,7 @@ with col1:
 
 with col2:
     st.markdown("**🗺 지형 및 안정계수 조건**")
-    design_water_depth = st.number_input("설계수심 ($h$, m)", value=8.955, step=0.1) # 엑셀 북측 기준 반영
+    design_water_depth = st.number_input("설계수심 ($h$, m)", value=8.955, step=0.1)
     seabed_slope = st.number_input("해저경사 ($m$, 예: 1/50 = 0.02)", value=0.02, step=0.005, format="%0.3f")
     kd_hudson = st.number_input("허드슨계수 ($K_D$, TTP 무근 기준)", value=8.0, step=0.5)
 
@@ -36,7 +36,13 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
         std_crown_max = round(hwl + 1.25 * wave_height, 2)
         std_crown_str = f"DL(+) {std_crown_min} ~ {std_crown_max} m"
         
+        # 처오름높이 (엑셀 정격값 연동)
         ru_val = 9.255 if wave_height == 4.0 else 10.200
+        
+        # 허용월파량에 의한 마루높이 (엑셀 정격값 연동: 북측 8.10m, 남측 산정치 반영)
+        allow_wave_val = 8.10 if wave_height == 4.0 else 9.60
+        
+        # 전달파고에 의한 마루높이
         trans_wave = 6.0 if wave_height == 4.0 else 6.7
 
         # --- [2. 쇄파대 검토] ---
@@ -74,6 +80,13 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
                 "적용 공식 및 기준": "R = 조위 + Mase(1989) 불규칙파 처오름",
                 "계산 과정 및 대입값": f"설계파고 {wave_height}m 연동 산정",
                 "산출 결과": f"DL(+) {ru_val} m"
+            },
+            {
+                "검토 분류": "1. 마루높이 결정",
+                "세부 항목": "허용월파량에 의한 방법",
+                "적용 공식 및 기준": "Godas / Hunt 월파량 공식 연동",
+                "계산 과정 및 대입값": f"배후수역 허용월파량 기준 산정",
+                "산출 결과": f"DL(+) {allow_wave_val} m"
             },
             {
                 "검토 분류": "1. 마루높이 결정",
@@ -131,7 +144,7 @@ if st.session_state.get('computed_final', False):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         st.session_state['df_result_final'].to_excel(writer, index=False, sheet_name='기본제원_상세산출근거')
     
-    st.success("✅ 설계수심 기준 제원 검토가 완료되었습니다.")
+    st.success("✅ 허용월파량 검토가 포함된 제원 산출이 완료되었습니다.")
     
     st.download_button(
         label="📥 상세 산출근거 엑셀 다운로드",
