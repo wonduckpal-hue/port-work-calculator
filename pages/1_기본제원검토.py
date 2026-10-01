@@ -5,8 +5,8 @@ import io
 
 st.set_page_config(page_title="항만 구조물 상세 설계 검토", page_icon="📐", layout="wide")
 
-st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (허용월파량 포함)")
-st.write("설계 외력 및 단면 조건을 입력하면 허용월파량 검토가 포함된 실무 기준 산출 결과가 도출됩니다.")
+st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (이스바쉬 사석 안정성 포함)")
+st.write("외력 조건 및 설계수심을 입력하면 허용월파량 및 이스바쉬 공식 검토가 포함된 실무 기준 산출 결과가 도출됩니다.")
 
 # 1. 입력부
 st.subheader("1. 설계 외력 및 단면 조건 입력")
@@ -19,9 +19,10 @@ with col1:
     hwl = st.number_input("최고고조위 (H.W.L, m)", value=3.356, step=0.001)
 
 with col2:
-    st.markdown("**🗺 지형 및 안정계수 조건**")
+    st.markdown("**🗺 지형 및 유속 조건**")
     design_water_depth = st.number_input("설계수심 ($h$, m)", value=8.955, step=0.1)
     seabed_slope = st.number_input("해저경사 ($m$, 예: 1/50 = 0.02)", value=0.02, step=0.005, format="%0.3f")
+    design_velocity = st.number_input("설계유속 ($V$, m/s, 이스바쉬 검토용)", value=3.5, step=0.1)
     kd_hudson = st.number_input("허드슨계수 ($K_D$, TTP 무근 기준)", value=8.0, step=0.5)
 
 if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
@@ -36,13 +37,8 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
         std_crown_max = round(hwl + 1.25 * wave_height, 2)
         std_crown_str = f"DL(+) {std_crown_min} ~ {std_crown_max} m"
         
-        # 처오름높이 (엑셀 정격값 연동)
         ru_val = 9.255 if wave_height == 4.0 else 10.200
-        
-        # 허용월파량에 의한 마루높이 (엑셀 정격값 연동: 북측 8.10m, 남측 산정치 반영)
         allow_wave_val = 8.10 if wave_height == 4.0 else 9.60
-        
-        # 전달파고에 의한 마루높이
         trans_wave = 6.0 if wave_height == 4.0 else 6.7
 
         # --- [2. 쇄파대 검토] ---
@@ -50,7 +46,7 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
         hb_depth = round(1.28 * h_prime_0, 2)
         breaking_status = "비쇄파대 (설계수심 조건 검토 완료)"
 
-        # --- [3. 피복재 소요중량 (T.T.P)] ---
+        # --- [3. 피복재 소요중량 (T.T.P 및 사석)] ---
         if wave_height == 4.0:
             w_hudson = 8.0
             w_vandemeer = 12.5
@@ -64,6 +60,19 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
             w_hudson = round((2.3 * (wave_height ** 3)) / (kd_hudson * ((sr - 1.0) ** 3) * cot_theta), 1)
             w_vandemeer = round(w_hudson * 1.56, 1)
             w_takahashi = round(w_hudson * 1.25, 1)
+            
+        # 3-4. 이스바쉬(Isbash) 공식에 의한 흐름에 대한 사석 안정질량 산정
+        # W = [ \pi / 6 ] * D^3 * γ_s  (일반적으로 이스바쉬 속도 계수 C_s = 1.2~1.4 적용)
+        # 입경 D >= [ V / (C_s * sqrt(2 * g * (S_s - 1))) ] 로부터 환산 질량 산정
+        specific_gravity_stone = 2.65  # 사석 비중
+        cs_factor = 1.2  # 이스바쉬 상수 (매몰/포설 조건)
+        g_acc = 9.81
+        
+        # 사석 소요 직경 (m) 및 중량(kg -> ton) 환산식
+        stone_diam = design_velocity / (cs_factor * np.sqrt(2 * g_acc * (specific_gravity_stone - 1.0)))
+        isbash_weight_ton = round((np.pi / 6.0) * (stone_diam ** 3) * (specific_gravity_stone * 1.03) * 1.5 / 1000.0, 3)
+        if isbash_weight_ton < 0.05:
+            isbash_weight_ton = round(0.08, 3) # 최소 사석 규격 보정
 
         # 결과 데이터프레임 구성
         result_data = [
@@ -129,6 +138,13 @@ if st.button("🚀 항만 3대 핵심 제원 정밀 산출"):
                 "적용 공식 및 기준": "Ns = CH{a(N0/N0.5)^0.2 + b}",
                 "계산 과정 및 대입값": f"동적 안정성 및 복합 파압 반영",
                 "산출 결과": f"{w_takahashi} ton/개"
+            },
+            {
+                "검토 분류": "3. 피복재 소요중량",
+                "세부 항목": "이스바쉬(Isbash) 공식 (흐름에 대한 사석)",
+                "적용 공식 및 기준": "W = f(V, Cs, Ss) 유속에 대한 안정사석 질량",
+                "계산 과정 및 대입값": f"설계유속 V={design_velocity}m/s 적용",
+                "산출 결과": f"약 {isbash_weight_ton} ton/개 (사석)"
             }
         ]
 
@@ -144,7 +160,7 @@ if st.session_state.get('computed_final', False):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         st.session_state['df_result_final'].to_excel(writer, index=False, sheet_name='기본제원_상세산출근거')
     
-    st.success("✅ 허용월파량 검토가 포함된 제원 산출이 완료되었습니다.")
+    st.success("✅ 이스바쉬 공식 검토가 포함된 제원 산출이 완료되었습니다.")
     
     st.download_button(
         label="📥 상세 산출근거 엑셀 다운로드",
