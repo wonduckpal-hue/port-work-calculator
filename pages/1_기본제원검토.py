@@ -5,7 +5,7 @@ import io
 
 st.set_page_config(page_title="항만 구조물 상세 설계 검토", page_icon="📐", layout="wide")
 
-st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 (이스바쉬 m³ 단위 적용)")
+st.title("📐 항만 구조물 마루높이·쇄파대·피복재 상세 산출 ")
 st.write("파랑 조건과 수심, 세굴방지공 설치수심을 입력하면 파랑 유속 자동산출 및 이스바쉬 체적($m^3$) 검토 결과가 도출됩니다.")
 
 # 1. 입력부
@@ -170,7 +170,7 @@ if st.session_state.get('computed_final', False):
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         st.session_state['df_result_final'].to_excel(writer, index=False, sheet_name='기본제원_상세산출근거')
     
-    st.success("✅ 이스바쉬 체적 단위($m^3$) 검토가 포함된 제원 산출이 완료되었습니다.")
+    st.success("제원 산출이 완료되었습니다.")
     
     st.download_button(
         label="📥 상세 산출근거 엑셀 다운로드",
